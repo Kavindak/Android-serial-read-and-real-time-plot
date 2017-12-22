@@ -1,0 +1,46 @@
+doi#include <SoftwareSerial.h>
+
+//SoftwareSerial BTserial(23, 24); // RX | TX
+//serial1 ()
+
+void setup() {
+Serial.begin(9600);
+//Serial1.begin(9600);
+//BTserial.begin(9600);
+delay(1000);
+}
+
+void loop() {
+int a = random(1, 30);
+int b = random(1, 9);
+//BTserial.println(a);
+//BTserial.print(b);
+
+
+
+
+Serial.print(float(a));
+Serial.print(',');
+Serial.print(float(b));
+Serial.print(' ');
+
+
+//Serial.println(float(a));//Serial.println(b);
+//Serial1.print(a);Serial1.print(b);
+//Serial.write(a,DEC);Serial.write(b,DEC);
+//Serial.write(a);
+//Serial.println(b);
+//Serial.println("HEllo");
+//IMPORTANT: The complete String has to be of the Form: 1234,1234,1234,1234;
+
+//(every Value has to be seperated through a comma (',') and the message has to
+
+//end with a semikolon (';'))
+
+
+
+//message to the receiving device
+
+delay(1000);
+
+}
