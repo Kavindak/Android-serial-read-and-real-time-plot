@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/activity_main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    tools:context ="com.example.User.myapplication.MainActivity"
+
+    android:orientation="vertical"
+    android:background="@color/backgroundcolor">
+
+    <com.jjoe64.graphview.GraphView
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:id="@+id/scatterPlot"/>
+
+
+    <ListView
+        android:layout_marginTop="15dp"
+        android:layout_below="@+id/scatterPlot"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:id="@+id/lvNewDevices"/>
+
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/btnStartConnection"
+        android:text="Start Connection"
+        android:layout_below="@+id/lvNewDevices"
+        android:layout_alignParentStart="true" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/btnFindUnpairedDevices"
+        android:text="Discover"
+        android:onClick="btnDiscover"
+        android:layout_below="@+id/lvNewDevices"
+        android:layout_toStartOf="@+id/btnONOFF" />
+
+    <Button
+        android:text="ON/OFF"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/btnONOFF"
+        android:layout_alignBaseline="@+id/btnFindUnpairedDevices"
+        android:layout_alignBottom="@+id/btnFindUnpairedDevices"
+        android:layout_alignParentEnd="true" />
+
+    <TextView
+        android:id="@+id/incomingMessage1"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/btnFindUnpairedDevices"
+        android:layout_centerHorizontal="true"
+        android:text="value 1 = ????"
+        android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+    <TextView
+        android:id="@+id/incomingMessage2"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/incomingMessage1"
+        android:layout_centerHorizontal="true"
+        android:text="value 2 = ????"
+        android:textAppearance="?android:attr/textAppearanceMedium"/>
+
+
+
+</RelativeLayout>
