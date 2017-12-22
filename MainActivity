@@ -1,0 +1,536 @@
+
+
+import android.Manifest;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Color;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.annotation.RequiresApi;
+import android.support.v4.content.LocalBroadcastManager;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.Button;
+import android.widget.ListView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.jjoe64.graphview.GraphView;
+import com.jjoe64.graphview.series.DataPoint;
+import com.jjoe64.graphview.series.PointsGraphSeries;
+
+import java.util.ArrayList;
+import java.util.UUID;
+import java.util.logging.Handler;
+
+
+public class MainActivity extends AppCompatActivity implements AdapterView.OnItemClickListener{
+    private static final String TAG = "MainActivity";
+
+    PointsGraphSeries<DataPoint> xySeries;
+    GraphView mScatterPlot;
+
+    private ArrayList<XYValue> xyValueArray;
+
+    BluetoothAdapter mBluetoothAdapter;
+    Button btnEnableDisable_Discoverable;
+    BluetoothConnectionService mBluetoothConnection;
+    Button btnStartConnection;
+
+    TextView incomingMessages1;
+    TextView incomingMessages2;
+
+    StringBuilder messages;
+
+    
+    final int handlerState = 0;
+    String[] values;
+    double mmx;
+    double mmy;
+
+
+    private static final UUID MY_UUID_INSECURE =
+            UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+
+    BluetoothDevice mBTDevice;
+
+    public ArrayList<BluetoothDevice> mBTDevices = new ArrayList<>();
+
+    public DeviceListAdapter mDeviceListAdapter;
+
+    ListView lvNewDevices;
+
+
+    // Create a BroadcastReceiver for ACTION_FOUND
+    private final BroadcastReceiver mBroadcastReceiver1 = new BroadcastReceiver() {
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            // When discovery finds a device
+            if (action.equals(mBluetoothAdapter.ACTION_STATE_CHANGED)) {
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, mBluetoothAdapter.ERROR);
+
+                switch(state){
+                    case BluetoothAdapter.STATE_OFF:
+                        Log.d(TAG, "onReceive: STATE OFF");
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_OFF:
+                        Log.d(TAG, "mBroadcastReceiver1: STATE TURNING OFF");
+                        break;
+                    case BluetoothAdapter.STATE_ON:
+                        Log.d(TAG, "mBroadcastReceiver1: STATE ON");
+                        break;
+                    case BluetoothAdapter.STATE_TURNING_ON:
+                        Log.d(TAG, "mBroadcastReceiver1: STATE TURNING ON");
+                        break;
+                }
+            }
+        }
+    };
+
+    /**
+     * Broadcast Receiver for changes made to bluetooth states such as:
+     * 1) Discoverability mode on/off or expire.
+     */
+    private final BroadcastReceiver mBroadcastReceiver2 = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if (action.equals(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED)) {
+
+                int mode = intent.getIntExtra(BluetoothAdapter.EXTRA_SCAN_MODE, BluetoothAdapter.ERROR);
+
+                switch (mode) {
+                    //Device is in Discoverable Mode
+                    case BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE:
+                        Log.d(TAG, "mBroadcastReceiver2: Discoverability Enabled.");
+                        break;
+                    //Device not in discoverable mode
+                    case BluetoothAdapter.SCAN_MODE_CONNECTABLE:
+                        Log.d(TAG, "mBroadcastReceiver2: Discoverability Disabled. Able to receive connections.");
+                        break;
+                    case BluetoothAdapter.SCAN_MODE_NONE:
+                        Log.d(TAG, "mBroadcastReceiver2: Discoverability Disabled. Not able to receive connections.");
+                        break;
+                    case BluetoothAdapter.STATE_CONNECTING:
+                        Log.d(TAG, "mBroadcastReceiver2: Connecting....");
+                        break;
+                    case BluetoothAdapter.STATE_CONNECTED:
+                        Log.d(TAG, "mBroadcastReceiver2: Connected.");
+                        break;
+                }
+
+            }
+        }
+    };
+
+
+
+
+    /**
+     * Broadcast Receiver for listing devices that are not yet paired
+     * -Executed by btnDiscover() method.
+     */
+    private BroadcastReceiver mBroadcastReceiver3 = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+            Log.d(TAG, "onReceive: ACTION FOUND.");
+
+            if (action.equals(BluetoothDevice.ACTION_FOUND)){
+                BluetoothDevice device = intent.getParcelableExtra (BluetoothDevice.EXTRA_DEVICE);
+                mBTDevices.add(device);
+                Log.d(TAG, "onReceive: " + device.getName() + ": " + device.getAddress());
+                mDeviceListAdapter = new DeviceListAdapter(context, R.layout.device_adapter_view, mBTDevices);
+                lvNewDevices.setAdapter(mDeviceListAdapter);
+            }
+        }
+    };
+
+    /**
+     * Broadcast Receiver that detects bond state changes (Pairing status changes)
+     */
+    private final BroadcastReceiver mBroadcastReceiver4 = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if(action.equals(BluetoothDevice.ACTION_BOND_STATE_CHANGED)){
+                BluetoothDevice mDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                //3 cases:
+                //case1: bonded already
+                if (mDevice.getBondState() == BluetoothDevice.BOND_BONDED){
+                    Log.d(TAG, "BroadcastReceiver: BOND_BONDED.");
+                    //inside BroadcastReceiver4
+                    mBTDevice = mDevice;
+                }
+                //case2: creating a bone
+                if (mDevice.getBondState() == BluetoothDevice.BOND_BONDING) {
+                    Log.d(TAG, "BroadcastReceiver: BOND_BONDING.");
+                }
+                //case3: breaking a bond
+                if (mDevice.getBondState() == BluetoothDevice.BOND_NONE) {
+                    Log.d(TAG, "BroadcastReceiver: BOND_NONE.");
+                }
+            }
+        }
+    };
+
+
+
+    @Override
+    protected void onDestroy() {
+        Log.d(TAG, "onDestroy: called.");
+        super.onDestroy();
+        unregisterReceiver(mBroadcastReceiver1);
+        unregisterReceiver(mBroadcastReceiver2);
+        unregisterReceiver(mBroadcastReceiver3);
+        unregisterReceiver(mBroadcastReceiver4);
+        //mBluetoothAdapter.cancelDiscovery();
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        Button btnONOFF = (Button) findViewById(R.id.btnONOFF);
+
+        lvNewDevices = (ListView) findViewById(R.id.lvNewDevices);
+        mBTDevices = new ArrayList<>();
+
+        btnStartConnection = (Button) findViewById(R.id.btnStartConnection);
+
+
+
+        incomingMessages1 = (TextView)findViewById(R.id.incomingMessage1);
+        incomingMessages2 = (TextView)findViewById(R.id.incomingMessage2);
+        messages=new StringBuilder();
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(mRecevier,new IntentFilter("incomingMessage"));
+
+        //Broadcasts when bond state changes (ie:pairing)
+        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
+        registerReceiver(mBroadcastReceiver4, filter);
+
+        mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+
+        lvNewDevices.setOnItemClickListener(MainActivity.this);
+
+
+        btnONOFF.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+                Log.d(TAG, "onClick: enabling/disabling bluetooth.");
+                enableDisableBT();
+            }
+        });
+
+        btnStartConnection.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                startConnection();
+            }
+        });
+
+        mScatterPlot = (GraphView)findViewById(R.id.scatterPlot);
+        xyValueArray=new ArrayList<>();
+
+
+    }
+
+    BroadcastReceiver mRecevier = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            String text = intent.getStringExtra("theMessage");
+            messages.append(text);
+
+            int endOfLineIdx= messages.indexOf(" ");
+            if (endOfLineIdx>0){
+               String msg = messages.toString();
+                values = msg.split(",");
+
+                    values[0] = values[0].trim();
+                    values[1] = values[1].trim();
+                     String xx = values[0].toString();
+                     String yy = values[1].toString();
+                  //  incomingMessages1.setText(values[0]);
+                   // incomingMessages2.setText(values[1]);
+                //isFloatNumber(xx);
+                if (isFloatNumber(xx,yy)){
+                 mmx = Double.parseDouble(xx);
+                 mmy = Double.parseDouble(yy);
+
+                }
+                init();
+                messages.delete(0,messages.length());
+
+
+
+            }
+              }
+    };
+
+public boolean isFloatNumber(String str1, String str2){
+    try {
+        Double.parseDouble(str1);
+        Double.parseDouble(str2);
+    }catch (NumberFormatException nfe){
+        return false;
+
+    }
+    return true;
+
+}
+
+
+    private void init(){
+
+        xySeries = new PointsGraphSeries<>();
+
+         // double x = Double.parseDouble(values[0].getBytes().toString());
+        // double y = Double.parseDouble(values[1]);
+        if (mmx<0 || mmy<0){
+            mmx=0.00;
+            mmy=0.00;
+            toastMessage("Unable to localize. Please move");
+        }
+        Log.d(TAG, "onClick: Adding a new point (x,y):("+mmx+","+mmy+")");
+        xyValueArray.add(new XYValue(mmx,mmy));//pass values to getters
+
+
+
+        if (xyValueArray.size()!=0){
+            incomingMessages1.setText(values[0]);
+            incomingMessages2.setText(values[1]);
+           createScatterPlot();
+        }else{
+            Log.d(TAG,"onCreate: No data to plot");
+        }
+
+
+   }
+
+     private void createScatterPlot(){
+
+         Log.d(TAG,"createPlot:creating plot.");
+         xyValueArray=sortArray(xyValueArray);
+
+         for (int i=0;i<xyValueArray.size();i++) {
+             try {
+                 double x = xyValueArray.get(i).getX();
+                 double y = xyValueArray.get(i).getY();
+                 xySeries.appendData(new DataPoint(x, y), true, 1000);
+
+             } catch (IllegalArgumentException e) {
+                 Log.e(TAG, "createPlot:IllegalArgumentException: " + e.getMessage());
+             }
+         }
+
+
+
+         xySeries.setShape(PointsGraphSeries.Shape.POINT);
+         xySeries.setColor(Color.BLUE);
+         xySeries.setSize(10f);
+
+         mScatterPlot.getViewport().setScalable(true);
+         mScatterPlot.getViewport().setScalableY(true);
+         mScatterPlot.getViewport().setScrollable(true);
+         mScatterPlot.getViewport().setScrollableY(true);
+
+         mScatterPlot.getViewport().setXAxisBoundsManual(true);
+         mScatterPlot.getViewport().setMaxX(50);
+         mScatterPlot.getViewport().setMinX(0);
+
+         mScatterPlot.getViewport().setYAxisBoundsManual(true);
+         mScatterPlot.getViewport().setMaxY(50);
+         mScatterPlot.getViewport().setMinY(0);
+         mScatterPlot.addSeries(xySeries);
+
+     }
+
+
+
+    private ArrayList<XYValue> sortArray(ArrayList<XYValue> array){
+        int factor=Integer.parseInt(String.valueOf(Math.round(Math.pow(array.size(),2))));
+        int m = array.size()-1;
+        int count = 0;
+        while (true){
+            m--;
+            if (m<=0){
+                m=array.size()-1;
+            }
+            try {
+                double tempY=array.get(m-1).getY();
+                double tempX=array.get(m-1).getX();
+
+                if (tempX>array.get(m).getX()){
+                    array.get(m-1).setY(array.get(m).getY());
+                    array.get(m).setY(tempY);
+                    array.get(m-1).setX(array.get(m).getX());
+                    array.get(m).setX(tempX);
+
+                }else if(tempX==array.get(m).getX()){
+                    count++;
+                }else if(array.get(m).getX()>array.get(m-1).getX()){
+                    count++;
+                }
+                if (count==factor){
+                    break;
+                }
+
+
+            }catch (ArrayIndexOutOfBoundsException e){
+                Log.e(TAG,"sortArray:ArrayIndexOutOfBoundsException. Need more than 1 data point to make plot" + e.getMessage());
+                break;
+
+            }
+
+        }
+
+        return array;
+    }
+
+
+
+    private void toastMessage(String message){
+        Toast.makeText(this,message, Toast.LENGTH_SHORT).show();
+
+    }
+
+    //create method for starting connection
+//***remember the conncction will fail and app will crash if you haven't paired first
+    public void startConnection(){
+        startBTConnection(mBTDevice,MY_UUID_INSECURE);
+
+        };
+
+
+
+    /**
+     * starting chat service method
+     */
+    public void startBTConnection(BluetoothDevice device, UUID uuid){
+        Log.d(TAG, "startBTConnection: Initializing RFCOM Bluetooth Connection.");
+
+        mBluetoothConnection.startClient(device,uuid);
+    }
+
+
+
+    public void enableDisableBT(){
+        if(mBluetoothAdapter == null){
+            Log.d(TAG, "enableDisableBT: Does not have BT capabilities.");
+            toastMessage("Does not have BT capabilities.");
+        }
+        if(!mBluetoothAdapter.isEnabled()){
+            Log.d(TAG, "enableDisableBT: enabling BT.");
+            Intent enableBTIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivity(enableBTIntent);
+
+            IntentFilter BTIntent = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+            registerReceiver(mBroadcastReceiver1, BTIntent);
+            toastMessage("Enabling Bluetooth");
+        }
+        if(mBluetoothAdapter.isEnabled()){
+            Log.d(TAG, "enableDisableBT: disabling BT.");
+            mBluetoothAdapter.disable();
+
+            IntentFilter BTIntent = new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED);
+            registerReceiver(mBroadcastReceiver1, BTIntent);
+            toastMessage("Disabling Bluetooth");
+        }
+
+    }
+
+
+    public void btnEnableDisable_Discoverable(View view) {
+        Log.d(TAG, "btnEnableDisable_Discoverable: Making device discoverable for 300 seconds.");
+
+        Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
+        discoverableIntent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300);
+        startActivity(discoverableIntent);
+
+        IntentFilter intentFilter = new IntentFilter(mBluetoothAdapter.ACTION_SCAN_MODE_CHANGED);
+        registerReceiver(mBroadcastReceiver2,intentFilter);
+
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public void btnDiscover(View view) {
+        Log.d(TAG, "btnDiscover: Looking for unpaired devices.");
+
+        if(mBluetoothAdapter.isDiscovering()){
+            mBluetoothAdapter.cancelDiscovery();
+            Log.d(TAG, "btnDiscover: Canceling discovery.");
+
+            //check BT permissions in manifest
+            checkBTPermissions();
+
+            mBluetoothAdapter.startDiscovery();
+            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
+        }
+        if(!mBluetoothAdapter.isDiscovering()){
+
+            //check BT permissions in manifest
+            checkBTPermissions();
+
+            mBluetoothAdapter.startDiscovery();
+            IntentFilter discoverDevicesIntent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
+            registerReceiver(mBroadcastReceiver3, discoverDevicesIntent);
+        }
+    }
+
+    /**
+     * This method is required for all devices running API23+
+     * Android must programmatically check the permissions for bluetooth. Putting the proper permissions
+     * in the manifest is not enough.
+     *
+     * NOTE: This will only execute on versions > LOLLIPOP because it is not needed otherwise.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    private void checkBTPermissions() {
+        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+            int permissionCheck = this.checkSelfPermission("Manifest.permission.ACCESS_FINE_LOCATION");
+            permissionCheck += this.checkSelfPermission("Manifest.permission.ACCESS_COARSE_LOCATION");
+            if (permissionCheck != 0) {
+
+                this.requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 1001); //Any number
+            }
+        }else{
+            Log.d(TAG, "checkBTPermissions: No need to check permissions. SDK version < LOLLIPOP.");
+        }
+    }
+
+    @Override
+    public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+        //first cancel discovery because its very memory intensive.
+        mBluetoothAdapter.cancelDiscovery();
+
+        Log.d(TAG, "onItemClick: You Clicked on a device.");
+        String deviceName = mBTDevices.get(i).getName();
+        String deviceAddress = mBTDevices.get(i).getAddress();
+
+        Log.d(TAG, "onItemClick: deviceName = " + deviceName);
+        Log.d(TAG, "onItemClick: deviceAddress = " + deviceAddress);
+
+        //create the bond.
+        //NOTE: Requires API 17+? I think this is JellyBean
+        if(Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2){
+            Log.d(TAG, "Trying to pair with " + deviceName);
+            mBTDevices.get(i).createBond();
+
+            mBTDevice = mBTDevices.get(i);
+            mBluetoothConnection = new BluetoothConnectionService(MainActivity.this);
+        }
+    }
+}
